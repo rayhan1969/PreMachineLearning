@@ -1,0 +1,164 @@
+---
+title: "Qualitative analysis of weight lifting exercises"
+author: "Ray C Han"
+date: "Friday, August 21, 2015"
+output: html_document
+---
+Intro
+Fitbit, Jawbone Up, and Nike FuelBand are devices which make it possible to collect a large amount of data about personal activity relatively cheaply. These type of instruments quantify self movement
+This project is to quantify how well an individual performs for a particular activity. In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. People were asked to perform barbell lifts correctly and incorrectly in 5 different ways. For reproducibility, I use set.seed, for prediction I use random forest to accomplish this for the reason that although it is difficult to interpret but often very precise.
+
+Matching the specification exactly (A)
+With elbows thrown to the front (B)
+With dumbbell lifted only halfway (C)
+With dumbbell lowered only halfway (D)
+With hips thrown to the front (E).
+For more detail (Go to the part on the Weight Lifting Exercise Dataset) of the website
+http://groupware.les.inf.puc-rio.br/har 
+
+
+Data
+packages I use:
+```{r}
+rm(list=ls())
+library(RCurl)
+library(caret)
+library(kernlab)
+library(AppliedPredictiveModeling)
+library(randomForest)
+library(ggplot2)
+library(Metrics)
+library(e1071)
+```
+
+Regarding this project the training data are available at: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data are available at: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+```{r}
+setwd('C:/Users/ALIENWARE/Desktop/Ray/PreMachineLearning')
+
+training_data <- read.csv("pml-training.csv", na.strings=c("", "NA"))
+test_data <- read.csv("pml-testing.csv", na.strings=c("", "NA"))
+
+```
+We remove the first column from the training data frame as it is just a place holder We also remove time and user information as they do not have any effect on the barbell lifts. Some columns in the data have mostly missing values. I delete features from the training and test data which have too many missing values, where it is not possible to impute
+
+```{r}
+training_data$X <- NULL
+removecol <- c("user_name", "raw_timestamp_part_1",
+                    "raw_timestamp_part_2", "cvtd_timestamp")
+for (col in removecol) {
+    training_data[, col] <- NULL
+}
+NAs <- apply(training_data,2,function(x) {sum(is.na(x))})
+training_data <- training_data[,which(NAs == 0)]
+```
+I deleted characteristics that don't have  a lot of  missing values but have one unique value (such as  zero variance predictors) or have few unique values relative to the number of samples and the ratio of frequency of the most common value to the frequency of second most common value is big
+```{r}
+nzv <- nearZeroVar(training_data)
+training_data <- training_data[-nzv]
+test_data <- test_data[-nzv]
+names(training_data)
+```
+
+Model
+I construct a random forest classifier to predict the action class. In calculating the accuracy of the model, I do 10-fold cross validation with 80:20 split, on each fold, 80% of the data is used For training the random forest 80 5 of the data is use, and what's left over is used for testing. 
+The confusion matrix for predictions on cross validation folds is shown below.
+
+```{r}
+set.seed(1)
+observe <- c()
+predict <- c()
+for(i in 1:10) {
+    processtrain = sample(1:dim(training_data)[1], size=dim(training_data)[1] * 0.8,
+    replace=F)
+    training_cross = training_data[processtrain,]
+    test_cross = training_data[-processtrain,]
+    randomf <- randomForest(classe ~ ., data=training_cross)
+    observe <- c(observe, test_cross$classe)
+    predict <- c(predict, predict(randomf, test_cross))
+}
+confusion_mat <- confusionMatrix(table(predict, observe))
+confusion_mat$table
+```
+The constructed model appears to classify reasonably well.  It misclassifies only for a few cases. The accuracy is r conf_mat$overall[[1]] * 100%  In the end we train the random forest with the entire dataset so that the classifier can be used to predict the class of an action, given the set of  measurements of the activity.
+```{r}
+model <- randomForest(classe ~ ., data=training_data)
+```
+Submission
+#prepare the test and model data
+
+```{r}
+# Function to write to files
+predict_write = function(x){
+  l = length(x)
+  for(i in 1:l){
+    Name= paste0("identity_",i,".txt")
+    write.table(x[i],file=Name,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+  }
+
+# Results
+library(randomForest)
+library(caret)
+results <- predict(model, test_data)
+
+# write answers to files
+predict_write(results)
+```
+
+Conclusion
+Confusion matrix is relatively accurate.
+
+References
+1)The Elements of Statistical Learning: Data Mining, Inference, and Prediction
+By Trevor Hastie
+2)Machine Learning
+By Tom M. Mitchell
+3)Pattern Recognition and Machine Learning
+By Christopher M. Bishop
+
+Appendix
+Figure 1 plot of modelFit
+```{r}
+library(ggplot2)
+# ggplot(model)
+```
+Figure 2 Importance of variables
+```{r}
+resize.win <- function(Width=6, Height=6){
+  # windows
+  dev.off(); 
+  windows(record=TRUE, width=Width, height=Height)
+}
+resize.win(5,5)
+plot(rnorm(100))
+resize.win(10,10)
+plot(rnorm(100))
+varImpPlot(model)
+```
+Figure 3 Prediction plot
+```{r}
+
+```
+
+
+@bibliogrpahy{2013,
+ author = {Andreas and Gellersen, Eduardo and Bulling Hans and Ugulino,
+ Hugo,Velloso, Wallace and Fuks },
+ title = {Qualitative Activity Recognition of Weight Lifting Exercises},
+ booktitle = {Proceedings of the 4th Augmented Human International Conference},
+ acmid = {2459256},
+ address = {New York, NY, USA},
+ doi = {10.1145/2459236.2459256},
+ isbn = {978-1-4503-1904-1},
+ keywords = {qualitative activity recognition, real-time user feedback, weight 
+ lifting},
+ location = {Stuttgart, Germany},
+ numpages = {8},
+ pages = {116--123},
+ publisher = {ACM},
+ series = {AH '13},
+ url = {http://doi.acm.org/10.1145/2459236.2459256},
+ year = {2013},
+}
+
